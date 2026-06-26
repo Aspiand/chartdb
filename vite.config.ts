@@ -30,6 +30,24 @@ export default defineConfig({
             '@': path.resolve(__dirname, './src'),
         },
     },
+    server: {
+        proxy: {
+            '/api': {
+                target:
+                    process.env.VITE_POCKETBASE_URL || 'http://localhost:8090',
+                changeOrigin: true,
+            },
+            '/_/': {
+                target:
+                    process.env.VITE_POCKETBASE_URL || 'http://localhost:8090',
+                changeOrigin: true,
+            },
+            '/collab': {
+                target: 'ws://localhost:8091',
+                ws: true,
+            },
+        },
+    },
     build: {
         rollupOptions: {
             external: (id) => /__test__/.test(id),
