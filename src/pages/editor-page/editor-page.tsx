@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { useChartDB } from '@/hooks/use-chartdb';
 import { useDialog } from '@/hooks/use-dialog';
 import { Toaster } from '@/components/toast/toaster';
@@ -23,9 +24,11 @@ import { AlertProvider } from '@/context/alert-context/alert-provider';
 import { CanvasProvider } from '@/context/canvas-context/canvas-provider';
 import { HIDE_CHARTDB_CLOUD } from '@/lib/env';
 import { useDiagramLoader } from './use-diagram-loader';
+import { useCollabSync } from '@/hooks/use-collab-sync';
 import { DiffProvider } from '@/context/diff-context/diff-provider';
 import { TopNavbarMock } from './top-navbar/top-navbar-mock';
 import { DiagramFilterProvider } from '@/context/diagram-filter-context/diagram-filter-provider';
+import { PermissionProvider } from '@/context/permission-context/permission-provider';
 
 const OPEN_STAR_US_AFTER_SECONDS = 30;
 const SHOW_STAR_US_AGAIN_AFTER_DAYS = 1;
@@ -45,6 +48,13 @@ const EditorPageComponent: React.FC = () => {
     const { starUsDialogLastOpen, setStarUsDialogLastOpen, githubRepoOpened } =
         useLocalConfig();
     const { initialDiagram } = useDiagramLoader();
+    const { diagramId } = useParams<{ diagramId: string }>();
+
+    // Wire Y.js CRDT realtime sync — broadcasts local changes, receives remote
+    useCollabSync({
+        diagramId: diagramId ?? null,
+        enabled: true,
+    });
 
     useEffect(() => {
         if (HIDE_CHARTDB_CLOUD) {
@@ -129,7 +139,9 @@ export const EditorPage: React.FC = () => (
                                                             <AlertProvider>
                                                                 <DialogProvider>
                                                                     <KeyboardShortcutsProvider>
-                                                                        <EditorPageComponent />
+                                                                        <PermissionProvider>
+                                                                            <EditorPageComponent />
+                                                                        </PermissionProvider>
                                                                     </KeyboardShortcutsProvider>
                                                                 </DialogProvider>
                                                             </AlertProvider>

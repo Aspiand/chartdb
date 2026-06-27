@@ -6,17 +6,22 @@ import type { TemplatesPageLoaderData } from './pages/templates-page/templates-p
 import { getTemplatesAndAllTags } from './templates-data/template-utils';
 
 const routes: RouteObject[] = [
-    ...['', 'diagrams/:diagramId'].map((path) => ({
-        path,
+    {
+        path: '',
+        async lazy() {
+            const { DashboardPage } =
+                await import('./pages/dashboard-page/dashboard-page');
+            return { element: <DashboardPage /> };
+        },
+    },
+    {
+        path: 'diagrams/:diagramId',
         async lazy() {
             const { EditorPage } =
                 await import('./pages/editor-page/editor-page');
-
-            return {
-                element: <EditorPage />,
-            };
+            return { element: <EditorPage /> };
         },
-    })),
+    },
     {
         path: 'examples',
         async lazy() {
@@ -127,6 +132,13 @@ const routes: RouteObject[] = [
                     (template) => template.slug === params.templateSlug
                 ),
             };
+        },
+    },
+    {
+        path: 'login',
+        async lazy() {
+            const { LoginPage } = await import('./pages/login-page/login-page');
+            return { element: <LoginPage /> };
         },
     },
     {

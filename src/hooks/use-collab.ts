@@ -2,8 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 
-const WS_URL =
-    import.meta.env.VITE_COLLAB_WS_URL || 'ws://localhost:8080/collab';
+const WS_URL = import.meta.env.VITE_COLLAB_WS_URL || 'ws://localhost:8091';
 
 interface UseCollabOptions {
     diagramId: string | null;

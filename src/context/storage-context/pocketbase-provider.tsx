@@ -16,7 +16,7 @@ import type { Note } from '@/lib/domain/note';
 import Dexie from 'dexie';
 import type { EntityTable } from 'dexie';
 
-const PB_URL = import.meta.env.VITE_POCKETBASE_URL || 'http://localhost:8080';
+const PB_URL = import.meta.env.VITE_POCKETBASE_URL || 'http://localhost:8090';
 
 export const PocketBaseProvider: React.FC<React.PropsWithChildren> = ({
     children,

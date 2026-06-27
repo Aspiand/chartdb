@@ -28,6 +28,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useLocalConfig } from '@/hooks/use-local-config';
 import { useNavigate } from 'react-router-dom';
 import { useAlert } from '@/context/alert-context/alert-context';
+import { VersionHistoryMenu } from './version-history-menu';
 
 export interface MenuProps {}
 
@@ -323,6 +324,12 @@ export const Menu: React.FC<MenuProps> = () => {
                     >
                         {t('menu.actions.delete_diagram')}
                     </MenubarItem>
+                </MenubarContent>
+            </MenubarMenu>
+            <MenubarMenu>
+                <MenubarTrigger>Versions</MenubarTrigger>
+                <MenubarContent>
+                    <VersionHistoryMenu />
                 </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
