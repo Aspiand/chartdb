@@ -1,28 +1,37 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { useChartDB } from '@/hooks/use-chartdb';
+import { pb } from '@/lib/auth';
 import type { Diagram } from '@/lib/domain/diagram';
 
 const WS_URL = import.meta.env.VITE_COLLAB_WS_URL || 'ws://localhost:8091';
+
+type SyncStatus = 'disconnected' | 'connecting' | 'synced';
+type PersistStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface UseCollabSyncOptions {
     diagramId: string | null;
     enabled?: boolean;
 }
 
+interface UseCollabSyncReturn {
+    syncStatus: SyncStatus;
+    persistStatus: PersistStatus;
+    lastSyncAt: Date | null;
+}
+
 /**
- * Bridges Y.js CRDT ↔ ChartDB provider.
+ * Bridges Y.js CRDT ↔ ChartDB provider + PB persist.
  *
- * Strategy: full state sync via Y.Map.
- *   - On local state change → serialize full diagram → Y.Map.set('diagram', json)
- *   - On remote Y.Map update → deserialize → load into ChartDB
- *   - Skips self-originated updates (origin check)
+ * 1. Local state change → broadcast via Y.Map → y-websocket peers
+ * 2. Remote Y.Map update → load into ChartDB (origin check prevents echo)
+ * 3. Debounced (2s) persist to PB `diagrams.data` blob → triggers versioning hook
  */
 export function useCollabSync({
     diagramId,
     enabled = true,
-}: UseCollabSyncOptions) {
+}: UseCollabSyncOptions): UseCollabSyncReturn {
     const chartDB = useChartDB();
     const {
         currentDiagram,
@@ -36,24 +45,65 @@ export function useCollabSync({
         loadDiagram,
     } = chartDB;
 
-    // Stable ref for loadDiagram to avoid exhaustive-deps warning
+    // ── State machine ───────────────────────────────────
+    const [syncStatus, setSyncStatus] = useState<SyncStatus>('disconnected');
+    const [persistStatus, setPersistStatus] = useState<PersistStatus>('idle');
+    const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
+
+    // Refs for lifecycle management
     const loadDiagramRef = useRef(loadDiagram);
     loadDiagramRef.current = loadDiagram;
 
     const wsRef = useRef<WebsocketProvider | null>(null);
     const docRef = useRef<Y.Doc | null>(null);
-    const originRef = useRef<string>('');
     const applyingRef = useRef(false);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Connect / reconnect when diagramId changes
+    // ── Persist to PB (debounced) ───────────────────────
+    const persistToPB = useCallback((diagram: Diagram) => {
+        // Skip if not logged in
+        if (!pb.authStore.record) return;
+
+        // Clear any pending debounce
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+        }
+
+        debounceRef.current = setTimeout(async () => {
+            // Double-check Y.doc is still synced before persisting
+            if (!wsRef.current || !wsRef.current.shouldConnect) return;
+
+            setPersistStatus('saving');
+            try {
+                const data = JSON.stringify(diagram);
+                await pb.collection('diagrams').update(diagram.id, { data });
+                setPersistStatus('saved');
+                setLastSyncAt(new Date());
+            } catch {
+                setPersistStatus('error');
+            }
+        }, 2000);
+    }, []);
+
+    // Cleanup debounce on unmount
+    useEffect(() => {
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, []);
+
+    // ── Connect / reconnect when diagramId changes ─────
     useEffect(() => {
         if (!diagramId || !enabled) {
             wsRef.current?.destroy();
             docRef.current?.destroy();
             wsRef.current = null;
             docRef.current = null;
+            setSyncStatus('disconnected');
             return;
         }
+
+        setSyncStatus('connecting');
 
         const doc = new Y.Doc();
         docRef.current = doc;
@@ -62,14 +112,26 @@ export function useCollabSync({
             connect: true,
         });
 
-        ws.on('sync', () => {
-            originRef.current = 'remote';
+        ws.on('sync', (synced: boolean) => {
+            if (synced) {
+                setSyncStatus('synced');
+            }
+        });
+
+        ws.on('status', ({ status }: { status: string }) => {
+            if (status === 'connected') {
+                setSyncStatus('synced');
+            } else if (status === 'connecting') {
+                setSyncStatus('connecting');
+            } else if (status === 'disconnected') {
+                setSyncStatus('disconnected');
+            }
         });
 
         // Listen for remote diagram state updates
         const yMap = doc.getMap('state');
         yMap.observe((event) => {
-            // Skip local-originated updates
+            // Skip local-originated updates — don't echo back
             if (event.transaction.origin === 'local') return;
 
             const raw = yMap.get('diagram');
@@ -95,7 +157,7 @@ export function useCollabSync({
         };
     }, [diagramId, enabled]);
 
-    // Publish local changes
+    // ── Publish local changes + persist ────────
     useEffect(() => {
         if (!wsRef.current || !docRef.current || !currentDiagram || !diagramId)
             return;
@@ -115,12 +177,14 @@ export function useCollabSync({
             updatedAt: new Date(),
         };
 
+        // Broadcast to peers via Y.Map
         const yMap = docRef.current.getMap('state');
         docRef.current.transact(() => {
-            // Set origin so remote peers don't echo back
-            originRef.current = 'local';
             yMap.set('diagram', JSON.stringify(diagram));
         }, 'local');
+
+        // Debounced persist to PB
+        persistToPB(diagram);
     }, [
         diagramId,
         currentDiagram,
@@ -131,7 +195,8 @@ export function useCollabSync({
         customTypes,
         notes,
         databaseType,
+        persistToPB,
     ]);
 
-    return;
+    return { syncStatus, persistStatus, lastSyncAt };
 }

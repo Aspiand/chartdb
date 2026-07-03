@@ -6,7 +6,7 @@ import { convertTemplateToNewDiagram } from '@/templates-data/template-utils';
 import type { Diagram } from '@/lib/domain/diagram';
 import { useStorage } from '@/hooks/use-storage';
 import { LocalConfigProvider } from '@/context/local-config-context/local-config-provider';
-import { StorageProviderSwitcher } from '@/context/storage-context/storage-provider-switcher';
+import { StorageProvider } from '@/context/storage-context/storage-provider';
 import { ThemeProvider } from '@/context/theme-context/theme-provider';
 
 export const CloneTemplateComponent: React.FC = () => {
@@ -59,10 +59,10 @@ export const CloneTemplateComponent: React.FC = () => {
 
 export const CloneTemplatePage: React.FC = () => (
     <LocalConfigProvider>
-        <StorageProviderSwitcher>
+        <StorageProvider>
             <ThemeProvider>
                 <CloneTemplateComponent />
             </ThemeProvider>
-        </StorageProviderSwitcher>
+        </StorageProvider>
     </LocalConfigProvider>
 );
